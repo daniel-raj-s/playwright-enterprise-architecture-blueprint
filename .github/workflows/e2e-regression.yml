@@ -1,0 +1,58 @@
+name: E2E Regression CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Get Playwright Version
+      run: |
+        PLAYWRIGHT_VERSION=$(npm list @playwright/test --depth=0 | grep @playwright/test | sed 's/.*@//')
+        echo "PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $GITHUB_ENV
+
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+
+    - name: Install Playwright Browsers & Deps
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: npx playwright install --with-deps
+
+    - name: Install Playwright System Dependencies (cache hit)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
+
+    - name: Run Playwright Tests (E2E Regression)
+      run: npm run test:e2e
+
+    - name: Upload Playwright Reports & Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-regression-report
+        path: |
+          playwright-report/
+          allure-results/
+          test-results/
+        retention-days: 14

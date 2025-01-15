@@ -1,0 +1,93 @@
+name: High-Frequency Scheduled Synthetic Monitoring
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Allows manual trigger from GHA UI
+
+jobs:
+  monitor:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Get Playwright Version
+      run: |
+        PLAYWRIGHT_VERSION=$(npm list @playwright/test --depth=0 | grep @playwright/test | sed 's/.*@//')
+        echo "PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION" >> $GITHUB_ENV
+
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
+
+    - name: Install Playwright Browsers & Deps
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: npx playwright install --with-deps
+
+    - name: Install Playwright System Dependencies (cache hit)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
+
+    - name: Run Synthetic Health Checks
+      run: npm run test:synthetic
+
+    - name: Notify Slack on Failure
+      if: failure()
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+        if [ -z "$SLACK_WEBHOOK_URL" ]; then
+          echo "SLACK_WEBHOOK_URL is not set. Skipping Slack notification."
+        else
+          curl -X POST -H 'Content-type: application/json' --data '{
+            "text": "🚨 *Production Alert: Synthetic Health Check Failure!*",
+            "attachments": [
+              {
+                "color": "#D32F2F",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Pipeline Failed:* <https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|Run ID: ${{ github.run_id }}>\n*Reason:* Critical-path synthetic test suite failed."
+                    }
+                  },
+                  {
+                    "type": "context",
+                    "elements": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "Trigger: *Scheduled Cron (15-min)* | Environment: *Production*"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }' $SLACK_WEBHOOK_URL
+        fi
+
+    - name: Upload Traces & Reports on Failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: synthetic-failure-artifacts
+        path: |
+          playwright-report/
+          test-results/
+        retention-days: 7

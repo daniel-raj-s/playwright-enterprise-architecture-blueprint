@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: playwright-enterprise-blueprint:latest
+    container_name: playwright-container
+    ipc: host # Prevents out-of-memory errors in Chromium-based browsers
+    volumes:
+      - ./playwright-report:/app/playwright-report
+      - ./allure-results:/app/allure-results
+      - ./test-results:/app/test-results
+    environment:
+      - CI=true
