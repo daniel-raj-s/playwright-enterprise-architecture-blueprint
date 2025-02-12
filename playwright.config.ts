@@ -24,7 +24,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'https://www.saucedemo.com',
+    baseURL: process.env.BASE_URL || 'https://www.saucedemo.com',
 
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
     actionTimeout: 10000,
@@ -40,21 +40,30 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
-  /* Configure projects for major browsers */
+  /* Configure projects for major browsers and synthetics */
   projects: [
     {
-      name: 'chromium',
+      name: 'e2e-chromium',
       use: { ...devices['Desktop Chrome'] },
+      testDir: './tests/e2e',
     },
 
     {
-      name: 'firefox',
+      name: 'e2e-firefox',
       use: { ...devices['Desktop Firefox'] },
+      testDir: './tests/e2e',
     },
 
     {
-      name: 'webkit',
+      name: 'e2e-webkit',
       use: { ...devices['Desktop Safari'] },
+      testDir: './tests/e2e',
+    },
+
+    {
+      name: 'synthetic-monitoring',
+      use: { ...devices['Desktop Chrome'] },
+      testDir: './tests/synthetic',
     },
   ],
 });
